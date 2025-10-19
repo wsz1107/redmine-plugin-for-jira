@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   redmine:
-    image: redmine:4.0.5
+    image: redmine:5.1
     ports:
       - 8888:3000
     volumes:
@@ -10,9 +10,14 @@ services:
       - ./data/plugins:/usr/src/redmine/plugins
       - ./data/themes:/usr/src/redmine/public/themes
     environment:
+      REDMINE_DB_USERNAME: ${REDMINE_DB_USERNAME}
       REDMINE_DB_MYSQL: ${REDMINE_DB_MYSQL}
+      REDMINE_DB_DATABASE: ${MYSQL_DATABASE}
       REDMINE_DB_PASSWORD: ${REDMINE_DB_PASSWORD}
       REDMINE_SECRET_KEY_BASE: ${REDMINE_SECRET_KEY_BASE}
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
     image: mysql:8.0.36
@@ -21,7 +26,15 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
-    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   db_data:
