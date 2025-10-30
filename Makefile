@@ -1,3 +1,4 @@
+include .env
 COMPOSE ?= docker compose
 DOCKER ?= docker
 DB_VOLUME ?= db_data
@@ -33,7 +34,7 @@ shell: ## Open a bash shell in the Redmine container.
 	$(COMPOSE) exec redmine bash
 
 db-shell: ## Open a MySQL shell inside the database container.
-	$(COMPOSE) exec db mysql -uroot -p$$MYSQL_ROOT_PASSWORD
+	$(COMPOSE) exec db mysql -uroot -p$(MYSQL_ROOT_PASSWORD)
 
 volume-create: ## Create the named Docker volume for persistent database storage.
 	$(DOCKER) volume create $(DB_VOLUME)
