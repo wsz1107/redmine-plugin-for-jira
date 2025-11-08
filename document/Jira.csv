@@ -1,0 +1,121 @@
+Summary,Issue key,Issue id,Issue Type,Status,Project key,Project name,Project type,Project lead,Project lead id,Project description,Priority,Resolution,Assignee,Assignee Id,Reporter,Reporter Id,Creator,Creator Id,Created,Updated,Last Viewed,Resolved,Due date,Votes,Description,Environment,Watchers,Watchers Id,Original estimate,Remaining Estimate,Time Spent,Work Ratio,Σ Original Estimate,Σ Remaining Estimate,Σ Time Spent,Security Level,Custom field (Development),Custom field (Issue color),Custom field (Rank),Custom field (Start date),Custom field (Team),Custom field (Vulnerability),Parent,Parent key,Parent summary,Status Category,Status Category Changed
+Plugin skeleton setup,JRI-52,10158,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,08/Nov/25 3:27 PM,,,0,"h2. User Story
+    As a developer, I want a working Redmine plugin skeleton so I can add logic incrementally.
+
+    h2. Proposed Solution
+    Generate a new Redmine plugin (redmine_jira_bridge) with init.rb, lib/, app/, db/migrate. Add minimal dependencies and a startup log.
+
+    h2. Acceptance Criteria
+    - Plugin installs via rake redmine:plugins:migrate
+- Visible in Redmine → Administration → Plugins
+- Logs 'Plugin initialized' at startup",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0000v:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Detect status change to Accepted,JRI-53,10159,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,03/Nov/25 11:27 PM,,,0,"h2. User Story
+    As the system, I need to detect when an issue status becomes 'Accepted' so I can trigger Jira creation.
+
+    h2. Proposed Solution
+    Implement a hook listener (controller_issues_edit_after_save) to check journal details for status_id change to configured value; verify acting user role.
+
+    h2. Acceptance Criteria
+    - Fires once when status becomes 'Accepted'
+- Records issue id and actor in logs
+- Does not fire if the issue already has a Jira key",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i00013:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Global admin settings for Jira connection and defaults,JRI-54,10160,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As an admin, I want to configure Jira base URL, credentials, and mapping defaults globally.
+
+    h2. Proposed Solution
+    Add a plugin settings page with fields: Jira URL, email, API token, accepted status ID, allowed roles, default issue type.
+
+    h2. Acceptance Criteria
+    - Settings saved and retrievable via Setting.plugin_redmine_jira_bridge[...]
+- Invalid config shows validation message
+- Sensitive credentials masked",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0001b:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Implement Jira REST client,JRI-55,10161,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As the plugin, I need to connect to Jira to create issues.
+
+    h2. Proposed Solution
+    Create JiraClient using basic auth (email + API token) and POST /rest/api/3/issue with JSON payload. Handle 4xx/5xx and network errors with clear messages.
+
+    h2. Acceptance Criteria
+    - Successful test issue creation to a sandbox project
+- Non-2xx responses raise a typed error
+- HTTP calls are unit-testable and stubbed",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0001j:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Map Redmine fields to Jira payload,JRI-56,10162,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As a developer, I want a mapping layer from Redmine Issue fields to Jira Issue fields.
+
+    h2. Proposed Solution
+    Create JiraPayloadBuilder mapping subject, description, priority, labels; include link back to the Redmine issue; support JSON-configured custom field mappings.
+
+    h2. Acceptance Criteria
+    - Payload validates mandatory Jira fields before send
+- Priority mapping table applied (Redmine → Jira)
+- Customfield_* mappings supported via JSON",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0001r:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Enqueue background job for Jira issue creation,JRI-57,10163,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As a developer, I want Jira creation to be async so UI stays responsive.
+
+    h2. Proposed Solution
+    Create JiraCreateJob (ActiveJob) with retries/backoff for transient errors; logs start/success/failure.
+
+    h2. Acceptance Criteria
+    - Job enqueued on Accepted event
+- Retry policy covers network/5xx errors
+- Structured logs for observability",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0001z:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Persist Jira key on Redmine issue and add journal note,JRI-58,10164,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As a Redmine user, I want to see the Jira key and link on the issue.
+
+    h2. Proposed Solution
+    Save Jira key to a custom field (or column) and add journal entry with a browse link.
+
+    h2. Acceptance Criteria
+    - Jira key visible on issue show view
+- Journal records creation with link
+- Re-runs don’t duplicate or overwrite without explicit action",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i00027:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Add per-project Jira settings,JRI-59,10165,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As a project admin, I want to set the Jira Project Key and defaults per Redmine project.
+
+    h2. Proposed Solution
+    Add Project → Settings → Jira tab with: Jira Project Key, default issue type, enable/disable toggle; inherit from global settings with overrides.
+
+    h2. Acceptance Criteria
+    - Settings stored per project
+- Disable toggle prevents new Jira creations
+- Defaults inherited cleanly when unset",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0002f:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Define permissions and role gate for triggering,JRI-60,10166,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As an admin, I want only specific roles to trigger Jira creation by changing status.
+
+    h2. Proposed Solution
+    Introduce project module :jira_bridge with permissions :trigger_jira_creation and :view_jira_link; enforce role gate in trigger logic.
+
+    h2. Acceptance Criteria
+    - Only users with allowed role can trigger
+- View permission controls Jira key visibility
+- Permissions appear in project role settings",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0002n:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Add sync logs and status visibility,JRI-61,10167,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As an admin, I want to see whether Jira creation succeeded or failed for each issue.
+
+    h2. Proposed Solution
+    Create jira_sync_logs table to store payload/response/status; show latest status in the issue sidebar; record failures in journal.
+
+    h2. Acceptance Criteria
+    - Log entry created for each sync attempt
+- Latest status visible on issue page
+- Failure messages include actionable details",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0002v:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+"Test suite: mapping, client, trigger, and integration",JRI-62,10168,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As a developer, I want automated tests to prevent regressions.
+
+    h2. Proposed Solution
+    Use RSpec/minitest with WebMock/VCR; cover payload mapping, client error handling, trigger logic, and an end-to-end flow with stubbed Jira.
+
+    h2. Acceptance Criteria
+    - Unit tests pass locally
+- >90% coverage on service classes
+- Integration test simulates status change → job → stored Jira key",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i00033:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
+Enhancements: webhook back-sync & manual create button,JRI-63,10169,Story,To Do,JRI,Jira Redmine Integration,software,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,WuSizhe,5ba0c45ff226b370980f2af9,WuSizhe,5ba0c45ff226b370980f2af9,03/Nov/25 11:22 PM,03/Nov/25 11:25 PM,,,,0,"h2. User Story
+    As a user/admin, I want extra capabilities for control and synchronization.
+
+    h2. Proposed Solution
+    Add an endpoint for Jira webhooks to reflect updates in Redmine; add a 'Create Jira now' button for manual control; consider Sidekiq/Resque adapters.
+
+    h2. Acceptance Criteria
+    - Webhook endpoint receives and logs events
+- Manual action creates Jira even without Accepted status
+- Background job adapter configurable",,WuSizhe,5ba0c45ff226b370980f2af9,,,,,,,,,,,0|i0003b:,,,,10122,JRI-27,Redmine Jira Integratin Plugin,To Do,03/Nov/25 11:22 PM
