@@ -4,6 +4,7 @@ require 'active_support/core_ext/object/blank'
 require 'active_support/core_ext/object/try'
 
 require_relative 'redmine_jira_bridge/version'
+require_relative 'redmine_jira_bridge/jira_client'
 
 module RedmineJiraBridge
   LOGGER_PREFIX = '[redmine_jira_bridge]'.freeze
