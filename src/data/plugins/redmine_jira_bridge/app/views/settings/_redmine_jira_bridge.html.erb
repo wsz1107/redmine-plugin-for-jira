@@ -1,0 +1,70 @@
+<% settings = (@settings || {}).dup %>
+<% validator = RedmineJiraBridge::SettingsValidator.new(settings) %>
+<% errors = flash[:redmine_jira_bridge_settings_errors] || (validator.valid? ? [] : validator.errors) %>
+
+<div class="box" id="redmine-jira-bridge-settings">
+  <h3>Jira bridge settings</h3>
+  <p class="info">Configure global Jira connection details and the defaults that downstream features will rely on.</p>
+
+  <% if errors.present? %>
+    <div class="flash error">
+      <p>Could not save settings. Please review the following:</p>
+      <ul>
+        <% Array(errors).each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <fieldset class="tabular">
+    <legend>Jira connection</legend>
+
+    <p>
+      <%= label_tag 'settings_jira_base_url', 'Jira base URL' %>
+      <%= text_field_tag 'settings[jira_base_url]', settings['jira_base_url'], size: 60, placeholder: 'https://your-domain.atlassian.net' %>
+      <span class="info">Include protocol; trailing slash optional.</span>
+    </p>
+
+    <p>
+      <%= label_tag 'settings_jira_email', 'Jira account email' %>
+      <%= text_field_tag 'settings[jira_email]', settings['jira_email'], size: 60, placeholder: 'admin@example.com' %>
+    </p>
+
+    <p>
+      <%= label_tag 'settings_jira_api_token', 'Jira API token' %>
+      <%= password_field_tag 'settings[jira_api_token]', settings['jira_api_token'], size: 60, autocomplete: 'off' %>
+      <span class="info">Value is stored securely but always displayed as masked text.</span>
+    </p>
+  </fieldset>
+
+  <fieldset class="tabular">
+    <legend>Redmine → Jira defaults</legend>
+
+    <p>
+      <%= label_tag 'settings_accepted_status_id', 'Accepted status' %>
+      <% statuses = IssueStatus.sorted %>
+      <%= select_tag 'settings[accepted_status_id]',
+                     options_for_select([[ '-- Select --', '' ]] + statuses.map { |status| [status.name, status.id.to_s] },
+                                        settings['accepted_status_id'].presence && settings['accepted_status_id'].to_s),
+                     include_blank: false %>
+      <span class="info">Issues moving into this status will trigger Jira integration logic.</span>
+    </p>
+
+    <p>
+      <%= label_tag 'settings_allowed_role_ids', 'Allowed roles' %>
+      <% roles = Role.givable %>
+      <%= hidden_field_tag 'settings[allowed_role_ids][]', '' %>
+      <%= select_tag 'settings[allowed_role_ids][]',
+                     options_from_collection_for_select(roles, 'id', 'name', Array(settings['allowed_role_ids']).map(&:to_s)),
+                     multiple: true,
+                     size: [[roles.size, 8].min, 3].max %>
+      <span class="info">Only members in these roles can trigger Jira creation.</span>
+    </p>
+
+    <p>
+      <%= label_tag 'settings_default_issue_type', 'Default Jira issue type' %>
+      <%= text_field_tag 'settings[default_issue_type]', settings['default_issue_type'], size: 30, placeholder: 'Task' %>
+    </p>
+  </fieldset>
+</div>

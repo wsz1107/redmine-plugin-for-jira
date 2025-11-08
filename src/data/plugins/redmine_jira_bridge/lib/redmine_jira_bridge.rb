@@ -43,6 +43,22 @@ module RedmineJiraBridge
       values.map(&:to_s).reject(&:blank?)
     end
 
+    def jira_base_url
+      normalize_string(configuration['jira_base_url'])
+    end
+
+    def jira_email
+      normalize_string(configuration['jira_email'])
+    end
+
+    def jira_api_token
+      normalize_string(configuration['jira_api_token'])
+    end
+
+    def default_issue_type
+      normalize_string(configuration['default_issue_type'])
+    end
+
     def issue_has_jira_key?(issue)
       return false unless issue
 
@@ -61,7 +77,18 @@ module RedmineJiraBridge
           cf_value.value.present?
       end
     end
+
+    private
+
+    def normalize_string(value)
+      return nil if value.nil?
+
+      str = value.to_s.strip
+      str.present? ? str : nil
+    end
   end
 end
 
+require_relative 'redmine_jira_bridge/settings_validator'
+require_relative 'redmine_jira_bridge/patches/scope_warning_patch'
 require_relative 'redmine_jira_bridge/hooks/issue_status_hook'
