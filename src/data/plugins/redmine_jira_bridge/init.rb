@@ -8,6 +8,11 @@ Redmine::Plugin.register :redmine_jira_bridge do
   url 'https://example.com/redmine_jira_bridge'
   author_url 'https://example.com'
 
+  settings default: {
+    'accepted_status_id' => nil,
+    'allowed_role_ids' => []
+  }
+
   requires_redmine version_or_higher: '5.0.0'
 end
 
