@@ -1,0 +1,48 @@
+<% project_setting = RedmineJiraBridge.project_setting(@project) || RedmineJiraBridge::ProjectSetting.new(project: @project) %>
+<% effective = RedmineJiraBridge.project_configuration(@project) %>
+<% fallback_project_key = @project.try(:identifier).presence || @project.try(:name) %>
+<% global_issue_type = RedmineJiraBridge.default_issue_type %>
+
+<div class="box tabular">
+  <p class="info">
+    Configure how this Redmine project creates Jira issues. Leave fields blank to inherit the global defaults.
+  </p>
+
+  <%= form_with url: redmine_jira_bridge_project_settings_path(@project), method: :put, local: true do %>
+    <p>
+      <%= hidden_field_tag 'jira_bridge[enabled]', '0' %>
+      <label class="block">
+        <%= check_box_tag 'jira_bridge[enabled]', '1', project_setting.enabled?, id: 'jira_bridge_enabled' %>
+        Enable Jira creation for this project
+      </label>
+      <span class="info">
+        Uncheck to prevent Accepted issues in this project from enqueuing Jira creation.
+      </span>
+    </p>
+
+    <p>
+      <%= label_tag 'jira_bridge_jira_project_key', 'Jira Project Key' %>
+      <%= text_field_tag 'jira_bridge[jira_project_key]', project_setting.jira_project_key, size: 20, id: 'jira_bridge_jira_project_key' %>
+      <span class="info">
+        Used when creating Jira issues. Defaults to the project identifier
+        (<%= fallback_project_key.presence || 'n/a' %>) when left blank.
+      </span>
+    </p>
+
+    <p>
+      <%= label_tag 'jira_bridge_default_issue_type', 'Default Jira Issue Type' %>
+      <%= text_field_tag 'jira_bridge[default_issue_type]', project_setting.default_issue_type, size: 20, id: 'jira_bridge_default_issue_type' %>
+      <span class="info">
+        Inherits the global default (<%= global_issue_type.presence || 'unset' %>) when blank.
+      </span>
+    </p>
+
+    <div class="buttons">
+      <%= submit_tag l(:button_save) %>
+      <span class="info">
+        Effective values: project key <strong><%= effective[:jira_project_key] || 'n/a' %></strong>,
+        issue type <strong><%= effective[:default_issue_type] || 'n/a' %></strong>.
+      </span>
+    </div>
+  <% end %>
+</div>

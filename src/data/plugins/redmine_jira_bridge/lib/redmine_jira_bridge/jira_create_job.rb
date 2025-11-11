@@ -51,7 +51,13 @@ module RedmineJiraBridge
 
       log(:info, 'start', issue_id: issue.id, attempt: attempt_number)
 
-      payload = build_payload(issue, options || {})
+      project_config = RedmineJiraBridge.project_configuration(issue.project)
+      unless project_config[:enabled]
+        log(:info, 'project_disabled', issue_id: issue.id, project_id: issue.project&.id)
+        return
+      end
+
+      payload = build_payload(issue, merge_builder_options(project_config, options))
       result = jira_client.create_issue(payload)
 
       log(:info, 'success',
@@ -162,6 +168,20 @@ module RedmineJiraBridge
       else
         value.to_s
       end
+    end
+
+    def merge_builder_options(project_config, options)
+      config_options = {}
+
+      if project_config && project_config[:jira_project_key].present?
+        config_options[:project_key] = project_config[:jira_project_key]
+      end
+
+      if project_config && project_config[:default_issue_type].present?
+        config_options[:issue_type] = project_config[:default_issue_type]
+      end
+
+      config_options.merge(options || {})
     end
 
     def extract_jira_key(result)

@@ -8,7 +8,7 @@ module RedmineJiraBridge
 
   class << self
     attr_writer :logger_instance
-    attr_accessor :jira_base_url_value, :jira_email_value, :jira_api_token_value
+    attr_accessor :jira_base_url_value, :jira_email_value, :jira_api_token_value, :project_configuration_provider
 
     def logger
       @logger_instance ||= Logger.new(StringIO.new)
@@ -35,6 +35,23 @@ module RedmineJiraBridge
 
     def issue_has_jira_key?(issue)
       issue_jira_key(issue).to_s.strip != ''
+    end
+
+    def project_configuration(project)
+      provider = project_configuration_provider
+      return provider.call(project) if provider.respond_to?(:call)
+      return provider if provider.is_a?(Hash)
+
+      {
+        enabled: true,
+        jira_project_key: project.respond_to?(:identifier) ? project.identifier : nil,
+        default_issue_type: 'Task'
+      }
+    end
+
+    def project_enabled?(project)
+      config = project_configuration(project)
+      config.key?(:enabled) ? !!config[:enabled] : true
     end
   end
 end
@@ -93,6 +110,7 @@ module RedmineJiraBridge
       RedmineJiraBridge.jira_email_value = 'bot@example.com'
       RedmineJiraBridge.jira_api_token_value = 'token'
       RedmineJiraBridge.logger_instance = Logger.new(StringIO.new)
+      RedmineJiraBridge.project_configuration_provider = nil
     end
 
     def test_perform_builds_payload_and_invokes_client
@@ -206,6 +224,58 @@ module RedmineJiraBridge
       assert_equal 'JRI-999', issue.jira_bridge_jira_key
       assert_equal 1, issue.journals.size
       assert_empty issue.save_calls
+    end
+
+    def test_perform_applies_project_defaults_when_job_options_missing
+      payload = { 'fields' => { 'summary' => 'Translate spec' } }
+      builder_options = nil
+
+      RedmineJiraBridge.project_configuration_provider = ->(project) {
+        {
+          enabled: true,
+          jira_project_key: "CONF-#{project.identifier}",
+          default_issue_type: 'Bug'
+        }
+      }
+
+      builder_factory = lambda do |issue_arg, options_arg|
+        builder_options = options_arg
+        StubBuilder.new(payload)
+      end
+
+      client = Minitest::Mock.new
+      client.expect(:create_issue, { 'key' => 'JRI-200', 'id' => '20000' }, [payload])
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, builder_factory) do
+        RedmineJiraBridge::JiraClient.stub(:new, ->(**_) { client }) do
+          job = RedmineJiraBridge::JiraCreateJob.new
+          job.perform(42, {})
+        end
+      end
+
+      assert_equal({ project_key: 'CONF-JRI', issue_type: 'Bug' }, builder_options)
+      client.verify
+    end
+
+    def test_perform_returns_early_when_project_disabled
+      RedmineJiraBridge.project_configuration_provider = ->(_project) {
+        {
+          enabled: false,
+          jira_project_key: 'CONF',
+          default_issue_type: 'Bug'
+        }
+      }
+
+      payload = { 'fields' => { 'summary' => 'Translate spec' } }
+      builder_invoked = false
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, ->(*_) { builder_invoked = true; StubBuilder.new(payload) }) do
+        job = RedmineJiraBridge::JiraCreateJob.new
+        result = job.perform(42, {})
+        assert_nil result
+      end
+
+      refute builder_invoked, 'builder should not be invoked when project disabled'
     end
   end
 end

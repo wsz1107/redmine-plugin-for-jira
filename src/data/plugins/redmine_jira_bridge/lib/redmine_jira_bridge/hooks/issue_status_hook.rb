@@ -28,6 +28,12 @@ module RedmineJiraBridge
           return
         end
 
+        project = issue.project
+        unless project && RedmineJiraBridge.project_enabled?(project)
+          RedmineJiraBridge.logger.debug("#{RedmineJiraBridge::LOGGER_PREFIX} Project #{project&.identifier || project&.id || 'unknown'} is not enabled for Jira sync; skipping issue ##{issue.id}")
+          return
+        end
+
         RedmineJiraBridge.logger.info("#{RedmineJiraBridge::LOGGER_PREFIX} Accepted transition detected for issue ##{issue.id} by #{actor.login}")
         RedmineJiraBridge::JiraCreateJob.perform_later(issue.id)
         RedmineJiraBridge.logger.info("#{RedmineJiraBridge::LOGGER_PREFIX} Enqueued JiraCreateJob for issue ##{issue.id}")

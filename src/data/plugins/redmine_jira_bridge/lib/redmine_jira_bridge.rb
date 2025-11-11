@@ -91,6 +91,31 @@ module RedmineJiraBridge
       end
     end
 
+    def project_configuration(project)
+      base = {
+        enabled: true,
+        jira_project_key: project_identifier(project),
+        default_issue_type: default_issue_type
+      }
+
+      record = project_setting_record(project)
+      return base unless record
+
+      base[:enabled] = record.enabled?
+      base[:jira_project_key] = record.jira_project_key if record.jira_project_key.present?
+      base[:default_issue_type] = record.default_issue_type if record.default_issue_type.present?
+
+      base
+    end
+
+    def project_enabled?(project)
+      project_configuration(project)[:enabled]
+    end
+
+    def project_setting(project)
+      project_setting_record(project)
+    end
+
     def issue_has_jira_key?(issue)
       issue_jira_key(issue).present?
     end
@@ -118,6 +143,29 @@ module RedmineJiraBridge
     end
 
     private
+
+    def project_setting_record(project)
+      return nil unless defined?(RedmineJiraBridge::ProjectSetting)
+      return nil unless project.respond_to?(:id) && project.id
+
+      RedmineJiraBridge::ProjectSetting.for(project)
+    rescue StandardError => e
+      logger.warn("#{LOGGER_PREFIX} Failed to load project setting for project #{project&.id}: #{e.class}: #{e.message}")
+      nil
+    end
+
+    def project_identifier(project)
+      return nil unless project
+
+      value =
+        if project.respond_to?(:identifier)
+          project.identifier
+        elsif project.respond_to?(:name)
+          project.name
+        end
+
+      normalize_string(value)
+    end
 
     def normalize_string(value)
       return nil if value.nil?
@@ -154,3 +202,4 @@ end
 require_relative 'redmine_jira_bridge/settings_validator'
 require_relative 'redmine_jira_bridge/patches/scope_warning_patch'
 require_relative 'redmine_jira_bridge/hooks/issue_status_hook'
+require_relative 'redmine_jira_bridge/hooks/project_settings_hook'
