@@ -7,6 +7,7 @@ require 'active_support/core_ext/object/try'
 require_relative 'redmine_jira_bridge/version'
 require_relative 'redmine_jira_bridge/jira_client'
 require_relative 'redmine_jira_bridge/jira_payload_builder'
+require_relative 'redmine_jira_bridge/jira_create_job'
 
 module RedmineJiraBridge
   LOGGER_PREFIX = '[redmine_jira_bridge]'.freeze

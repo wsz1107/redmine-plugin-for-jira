@@ -29,6 +29,8 @@ module RedmineJiraBridge
         end
 
         RedmineJiraBridge.logger.info("#{RedmineJiraBridge::LOGGER_PREFIX} Accepted transition detected for issue ##{issue.id} by #{actor.login}")
+        RedmineJiraBridge::JiraCreateJob.perform_later(issue.id)
+        RedmineJiraBridge.logger.info("#{RedmineJiraBridge::LOGGER_PREFIX} Enqueued JiraCreateJob for issue ##{issue.id}")
       end
 
       private

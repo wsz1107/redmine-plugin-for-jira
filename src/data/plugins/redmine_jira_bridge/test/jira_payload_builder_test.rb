@@ -3,6 +3,26 @@ require 'ostruct'
 
 require_relative '../lib/redmine_jira_bridge/jira_payload_builder'
 
+unless RedmineJiraBridge.respond_to?(:priority_mapping)
+  module RedmineJiraBridge
+    class << self
+      attr_accessor :test_priority_mapping, :test_custom_field_mappings, :test_default_issue_type
+    end
+
+    def self.priority_mapping
+      test_priority_mapping || {}
+    end
+
+    def self.custom_field_mappings
+      test_custom_field_mappings || {}
+    end
+
+    def self.default_issue_type
+      test_default_issue_type || 'Task'
+    end
+  end
+end
+
 unless defined?(Setting)
   class Setting
     class << self
@@ -118,13 +138,25 @@ module RedmineJiraBridge
         end
       end
 
+      assert_match(/summary is required/i, error.message)
+    end
+
+    def test_validation_error_when_project_key_missing_and_issue_has_no_project
+      issue = issue_stub(subject: 'Translate spec', description: 'Line 1', project: nil)
+
+      error = assert_raises(JiraPayloadBuilder::ValidationError) do
+        with_default_dependencies do
+          JiraPayloadBuilder.new(issue, project_key: '  ').build
+        end
+      end
+
       assert_match(/project key is required/i, error.message)
     end
 
     private
 
-    def issue_stub(subject:, description:, priority: nil, custom_field_values: [])
-      project = OpenStruct.new(identifier: 'JRI')
+    def issue_stub(subject:, description:, priority: nil, custom_field_values: [], project: :default)
+      project = OpenStruct.new(identifier: 'JRI') if project == :default
       OpenStruct.new(
         id: 42,
         subject: subject,
@@ -140,21 +172,25 @@ module RedmineJiraBridge
     end
 
     def with_default_dependencies
-      with_mappings(priority: {}, custom_fields: {}) do
-        RedmineJiraBridge.stub(:default_issue_type, 'Task') do
-          yield
-        end
+      with_mappings(priority: {}, custom_fields: {}, default_type: 'Task') do
+        yield
       end
     end
 
-    def with_mappings(priority: {}, custom_fields: {})
-      RedmineJiraBridge.stub(:priority_mapping, priority) do
-        RedmineJiraBridge.stub(:custom_field_mappings, custom_fields) do
-          RedmineJiraBridge.stub(:default_issue_type, 'Task') do
-            yield
-          end
-        end
-      end
+    def with_mappings(priority: {}, custom_fields: {}, default_type: 'Task')
+      previous_priority = RedmineJiraBridge.test_priority_mapping
+      previous_custom = RedmineJiraBridge.test_custom_field_mappings
+      previous_default = RedmineJiraBridge.test_default_issue_type
+
+      RedmineJiraBridge.test_priority_mapping = priority
+      RedmineJiraBridge.test_custom_field_mappings = custom_fields
+      RedmineJiraBridge.test_default_issue_type = default_type
+
+      yield
+    ensure
+      RedmineJiraBridge.test_priority_mapping = previous_priority
+      RedmineJiraBridge.test_custom_field_mappings = previous_custom
+      RedmineJiraBridge.test_default_issue_type = previous_default
     end
   end
 end
