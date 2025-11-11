@@ -14,7 +14,9 @@ Redmine::Plugin.register :redmine_jira_bridge do
     'jira_api_token' => '',
     'accepted_status_id' => nil,
     'allowed_role_ids' => [],
-    'default_issue_type' => ''
+    'default_issue_type' => '',
+    'priority_mapping' => '',
+    'custom_field_mappings' => ''
   },
            partial: 'settings/redmine_jira_bridge'
 

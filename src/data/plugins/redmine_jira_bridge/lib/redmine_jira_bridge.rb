@@ -1,3 +1,4 @@
+require 'json'
 require 'logger'
 require 'redmine'
 require 'active_support/core_ext/object/blank'
@@ -5,6 +6,7 @@ require 'active_support/core_ext/object/try'
 
 require_relative 'redmine_jira_bridge/version'
 require_relative 'redmine_jira_bridge/jira_client'
+require_relative 'redmine_jira_bridge/jira_payload_builder'
 
 module RedmineJiraBridge
   LOGGER_PREFIX = '[redmine_jira_bridge]'.freeze
@@ -60,6 +62,34 @@ module RedmineJiraBridge
       normalize_string(configuration['default_issue_type'])
     end
 
+    def priority_mapping
+      parse_simple_mapping(configuration['priority_mapping'], 'priority mapping')
+    end
+
+    def custom_field_mappings
+      raw = configuration['custom_field_mappings']
+      data = parse_json_structure(raw, 'custom field mappings')
+
+      case data
+      when Hash
+        data.each_with_object({}) do |(jira_key, redmine_identifier), memo|
+          jira = normalize_string(jira_key)
+          redmine = normalize_string(redmine_identifier)
+          memo[jira] = redmine if jira && redmine
+        end
+      when Array
+        data.each_with_object({}) do |entry, memo|
+          next unless entry.is_a?(Hash)
+
+          jira = normalize_string(entry['jira'] || entry['jira_field'] || entry['jiraField'])
+          redmine = normalize_string(entry['redmine'] || entry['redmine_field'] || entry['redmineField'])
+          memo[jira] = redmine if jira && redmine
+        end
+      else
+        {}
+      end
+    end
+
     def issue_has_jira_key?(issue)
       return false unless issue
 
@@ -86,6 +116,29 @@ module RedmineJiraBridge
 
       str = value.to_s.strip
       str.present? ? str : nil
+    end
+
+    def parse_simple_mapping(raw, label)
+      data = parse_json_structure(raw, label)
+      return {} unless data.is_a?(Hash)
+
+      data.each_with_object({}) do |(key, value), memo|
+        normalized_key = normalize_string(key)
+        normalized_value = normalize_string(value)
+        memo[normalized_key] = normalized_value if normalized_key && normalized_value
+      end
+    end
+
+    def parse_json_structure(raw, label)
+      return raw if raw.is_a?(Hash) || raw.is_a?(Array)
+
+      str = normalize_string(raw)
+      return {} if str.nil?
+
+      JSON.parse(str)
+    rescue JSON::ParserError => e
+      logger.warn("#{LOGGER_PREFIX} Failed to parse #{label}: #{e.message}")
+      {}
     end
   end
 end
