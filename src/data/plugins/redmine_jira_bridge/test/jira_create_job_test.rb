@@ -25,11 +25,23 @@ module RedmineJiraBridge
     def jira_api_token
       jira_api_token_value
     end
+
+    def issue_jira_key(issue)
+      return nil unless issue
+
+      value = issue.respond_to?(:jira_bridge_jira_key) ? issue.jira_bridge_jira_key : nil
+      value.to_s.strip.empty? ? nil : value
+    end
+
+    def issue_has_jira_key?(issue)
+      issue_jira_key(issue).to_s.strip != ''
+    end
   end
 end
 
 class Issue
-  attr_reader :id, :subject, :description, :project, :priority, :custom_field_values
+  attr_reader :id, :subject, :description, :project, :priority, :custom_field_values, :save_calls
+  attr_accessor :jira_bridge_jira_key
 
   def initialize(id:, subject:, description: 'Body', project_identifier: 'JRI')
     @id = id
@@ -38,12 +50,27 @@ class Issue
     @project = OpenStruct.new(identifier: project_identifier)
     @priority = OpenStruct.new(name: 'Normal')
     @custom_field_values = []
+    @journals = []
+    @save_calls = []
   end
 
   def self.find_by(id:)
     return Issue.new(id: id, subject: 'Translate spec') if id == 42
 
     nil
+  end
+
+  def journals
+    @journals
+  end
+
+  def init_journal(user, notes)
+    @journals << OpenStruct.new(user: user, notes: notes)
+  end
+
+  def save(*)
+    @save_calls << { validate: false }
+    true
   end
 end
 
@@ -134,6 +161,51 @@ module RedmineJiraBridge
           end
         end
       end
+    end
+
+    def test_persists_jira_key_and_records_journal
+      payload = { 'fields' => { 'summary' => 'Translate spec' } }
+      issue = Issue.new(id: 99, subject: 'Translate spec')
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, ->(_issue, _opts) { StubBuilder.new(payload) }) do
+        client = Minitest::Mock.new
+        client.expect(:create_issue, { 'key' => 'JRI-200', 'id' => '20000' }, [payload])
+
+        RedmineJiraBridge::JiraClient.stub(:new, ->(**_) { client }) do
+          job = RedmineJiraBridge::JiraCreateJob.new
+          job.stub(:locate_issue, issue) do
+            job.perform(99, {})
+          end
+        end
+      end
+
+      assert_equal 'JRI-200', issue.jira_bridge_jira_key
+      assert_equal 2, issue.save_calls.size
+      assert_equal 1, issue.journals.size
+      assert_includes issue.journals.first.notes, 'https://example.atlassian.net/browse/JRI-200'
+    end
+
+    def test_does_not_overwrite_existing_jira_key_or_duplicate_journal
+      payload = { 'fields' => { 'summary' => 'Translate spec' } }
+      issue = Issue.new(id: 100, subject: 'Translate spec')
+      issue.jira_bridge_jira_key = 'JRI-999'
+      issue.init_journal(nil, 'Created Jira issue JRI-999: https://example.atlassian.net/browse/JRI-999')
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, ->(_issue, _opts) { StubBuilder.new(payload) }) do
+        client = Minitest::Mock.new
+        client.expect(:create_issue, { 'key' => 'JRI-1000', 'id' => '20001' }, [payload])
+
+        RedmineJiraBridge::JiraClient.stub(:new, ->(**_) { client }) do
+          job = RedmineJiraBridge::JiraCreateJob.new
+          job.stub(:locate_issue, issue) do
+            job.perform(100, {})
+          end
+        end
+      end
+
+      assert_equal 'JRI-999', issue.jira_bridge_jira_key
+      assert_equal 1, issue.journals.size
+      assert_empty issue.save_calls
     end
   end
 end

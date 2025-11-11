@@ -60,6 +60,10 @@ module RedmineJiraBridge
           jira_key: result['key'],
           jira_id: result['id'])
 
+      jira_key = extract_jira_key(result)
+      key_persisted = persist_jira_key(issue, jira_key)
+      record_jira_journal(issue, jira_key) if key_persisted
+
       result
     rescue JiraPayloadBuilder::ValidationError => e
       log(:error, 'payload_validation_failed', issue_id: issue_id, error: e.message)
@@ -158,6 +162,124 @@ module RedmineJiraBridge
       else
         value.to_s
       end
+    end
+
+    def extract_jira_key(result)
+      return nil unless result.respond_to?(:[])
+
+      key = result['key'] || result[:key]
+      normalize_string(key)
+    end
+
+    def persist_jira_key(issue, jira_key)
+      return false if issue.nil? || jira_key.nil?
+      return false if RedmineJiraBridge.issue_jira_key(issue).present?
+
+      issue_id = issue_id_for(issue)
+
+      if assign_jira_key_attribute(issue, jira_key)
+        log(:info, 'jira_key_persisted', issue_id: issue_id, storage: 'attribute', jira_key: jira_key)
+        return true
+      end
+
+      if assign_jira_key_custom_field(issue, jira_key)
+        log(:info, 'jira_key_persisted', issue_id: issue_id, storage: 'custom_field', jira_key: jira_key)
+        return true
+      end
+
+      log(:warn, 'jira_key_persist_failed', issue_id: issue_id, jira_key: jira_key, reason: 'no_storage_location')
+      false
+    end
+
+    def assign_jira_key_attribute(issue, jira_key)
+      attr = %i[jira_bridge_jira_key jira_issue_key jira_key].find { |name| issue.respond_to?("#{name}=") }
+      return false unless attr
+
+      issue.public_send("#{attr}=", jira_key)
+      persist_issue(issue)
+    end
+
+    def assign_jira_key_custom_field(issue, jira_key)
+      cf_value = find_jira_custom_field_value(issue)
+      return false unless cf_value && cf_value.respond_to?(:value=)
+
+      cf_value.value = jira_key
+      persist_issue(issue)
+    end
+
+    def find_jira_custom_field_value(issue)
+      return nil unless issue.respond_to?(:custom_field_values)
+
+      Array(issue.custom_field_values).find do |cf_value|
+        cf = cf_value.respond_to?(:custom_field) ? cf_value.custom_field : nil
+        name = cf.respond_to?(:name) ? cf.name.to_s : ''
+        next false if name.empty?
+
+        name.casecmp('jira key').zero? || name.casecmp('jira issue key').zero?
+      end
+    end
+
+    def persist_issue(issue)
+      return true unless issue.respond_to?(:save)
+
+      issue.save(validate: false)
+    rescue ArgumentError
+      issue.save
+    rescue StandardError => e
+      log(:error, 'jira_key_save_failed', issue_id: issue_id_for(issue), error: e.message)
+      false
+    end
+
+    def record_jira_journal(issue, jira_key)
+      return false if issue.nil? || jira_key.nil?
+      return false unless issue.respond_to?(:init_journal) && issue.respond_to?(:save)
+      return false if journal_entry_exists?(issue, jira_key)
+
+      notes = build_journal_notes(jira_key)
+      issue.init_journal(journal_user(issue), notes)
+      persist_issue(issue)
+    end
+
+    def journal_entry_exists?(issue, jira_key)
+      Array(issue.respond_to?(:journals) ? issue.journals : []).any? do |journal|
+        journal.respond_to?(:notes) && journal.notes.to_s.include?(jira_key.to_s)
+      end
+    end
+
+    def build_journal_notes(jira_key)
+      url = jira_issue_url(jira_key)
+      return "Created Jira issue #{jira_key}" unless url
+
+      "Created Jira issue #{jira_key}: #{url}"
+    end
+
+    def jira_issue_url(jira_key)
+      base = normalize_string(RedmineJiraBridge.jira_base_url)
+      key = normalize_string(jira_key)
+      return nil if base.nil? || key.nil?
+
+      "#{base.chomp('/')}/browse/#{key}"
+    end
+
+    def journal_user(issue)
+      if defined?(User) && User.respond_to?(:current)
+        User.current
+      elsif issue.respond_to?(:author)
+        issue.author
+      end
+    rescue StandardError
+      nil
+    end
+
+    def issue_id_for(issue)
+      issue.respond_to?(:id) ? issue.id : 'unknown'
+    end
+
+    def normalize_string(value)
+      return nil if value.nil?
+
+      str = value.to_s.strip
+      str.empty? ? nil : str
     end
   end
 end

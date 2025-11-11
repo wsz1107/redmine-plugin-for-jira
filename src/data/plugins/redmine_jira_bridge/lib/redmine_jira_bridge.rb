@@ -92,22 +92,29 @@ module RedmineJiraBridge
     end
 
     def issue_has_jira_key?(issue)
-      return false unless issue
+      issue_jira_key(issue).present?
+    end
+
+    def issue_jira_key(issue)
+      return nil unless issue
 
       %i[jira_bridge_jira_key jira_issue_key jira_key].each do |attr|
         next unless issue.respond_to?(attr)
 
         value = issue.public_send(attr)
-        return true if value.present?
+        return value if value.present?
       end
 
-      Array(issue.try(:custom_field_values)).any? do |cf_value|
+      Array(issue.try(:custom_field_values)).each do |cf_value|
         cf_name = cf_value.try(:custom_field).try(:name).to_s
-        next false unless cf_name.present?
+        next unless cf_name.present?
+        next unless cf_name.casecmp('jira key').zero? || cf_name.casecmp('jira issue key').zero?
 
-        (cf_name.casecmp('jira key').zero? || cf_name.casecmp('jira issue key').zero?) &&
-          cf_value.value.present?
+        value = cf_value.try(:value)
+        return value if value.present?
       end
+
+      nil
     end
 
     private
