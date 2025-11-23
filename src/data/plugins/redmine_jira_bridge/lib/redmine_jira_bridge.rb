@@ -201,5 +201,5 @@ end
 
 require_relative 'redmine_jira_bridge/settings_validator'
 require_relative 'redmine_jira_bridge/patches/scope_warning_patch'
+require_relative 'redmine_jira_bridge/patches/projects_helper_patch'
 require_relative 'redmine_jira_bridge/hooks/issue_status_hook'
-require_relative 'redmine_jira_bridge/hooks/project_settings_hook'

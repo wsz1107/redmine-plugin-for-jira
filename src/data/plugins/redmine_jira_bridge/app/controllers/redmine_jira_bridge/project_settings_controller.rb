@@ -1,7 +1,7 @@
 module RedmineJiraBridge
   class ProjectSettingsController < ::ApplicationController
     before_action :find_project
-    before_action :authorize_manage_project!
+    before_action :authorize_project_edit!
 
     helper :projects
 
@@ -26,8 +26,8 @@ module RedmineJiraBridge
       render_404
     end
 
-    def authorize_manage_project!
-      return if User.current.allowed_to?(:manage_project, @project)
+    def authorize_project_edit!
+      return if User.current.allowed_to?(:edit_project, @project)
 
       render_403
     end
