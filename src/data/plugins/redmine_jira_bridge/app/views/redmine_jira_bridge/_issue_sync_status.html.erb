@@ -1,0 +1,58 @@
+<% issue = local_assigns[:issue] || @issue %>
+<% project = issue.try(:project) %>
+<% user = defined?(User) && User.respond_to?(:current) ? User.current : nil %>
+<% authorized = user && user.respond_to?(:allowed_to?) && project && user.allowed_to?(:view_jira_link, project) %>
+<% enabled = project && RedmineJiraBridge.project_module_enabled?(project) %>
+<% log = RedmineJiraBridge.latest_sync_log(issue) %>
+
+<% unless issue && project && enabled && authorized %>
+  <% return %>
+<% end %>
+
+<div class="box jira-sync-status">
+  <h3>Jira sync</h3>
+
+  <% if log %>
+    <% status_value = log.status.to_s %>
+    <p class="jira-sync-status__state">
+      <strong>Status:</strong>
+      <span class="jira-sync-status__state-value jira-sync-status__state-<%= status_value.presence || 'unknown' %>">
+        <%= status_value.present? ? status_value.tr('_', ' ').capitalize : 'Unknown' %>
+      </span>
+    </p>
+
+    <dl class="jira-sync-status__meta">
+      <dt>Updated</dt>
+      <dd><%= format_time(log.updated_at || log.created_at) %></dd>
+
+      <% if log.response_status.present? %>
+        <dt>HTTP</dt>
+        <dd><%= log.response_status %></dd>
+      <% end %>
+
+      <% if log.jira_key.present? %>
+        <% jira_url = RedmineJiraBridge.jira_issue_url(log.jira_key) %>
+        <dt>Jira issue</dt>
+        <dd>
+          <% if jira_url.present? %>
+            <%= link_to log.jira_key, jira_url, target: '_blank', rel: 'noopener' %>
+          <% else %>
+            <%= h(log.jira_key) %>
+          <% end %>
+        </dd>
+      <% end %>
+    </dl>
+
+    <% if log.details.present? %>
+      <p class="jira-sync-status__details"><%= h(log.details) %></p>
+    <% end %>
+  <% else %>
+    <p class="jira-sync-status__details">
+      No Jira sync attempts recorded for this issue yet.
+    </p>
+  <% end %>
+
+  <p class="info">
+    Payloads and responses are stored in the Jira sync log for troubleshooting.
+  </p>
+</div>

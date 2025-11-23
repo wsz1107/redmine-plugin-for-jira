@@ -8,6 +8,7 @@ require_relative 'redmine_jira_bridge/version'
 require_relative 'redmine_jira_bridge/jira_client'
 require_relative 'redmine_jira_bridge/jira_payload_builder'
 require_relative 'redmine_jira_bridge/jira_create_job'
+require_relative 'redmine_jira_bridge/sync_log_recorder'
 
 module RedmineJiraBridge
   LOGGER_PREFIX = '[redmine_jira_bridge]'.freeze
@@ -61,6 +62,14 @@ module RedmineJiraBridge
 
     def default_issue_type
       normalize_string(configuration['default_issue_type'])
+    end
+
+    def jira_issue_url(jira_key)
+      base = normalize_string(jira_base_url)
+      key = normalize_string(jira_key)
+      return nil if base.nil? || key.nil?
+
+      "#{base.chomp('/')}/browse/#{key}"
     end
 
     def priority_mapping
@@ -154,6 +163,16 @@ module RedmineJiraBridge
       nil
     end
 
+    def latest_sync_log(issue)
+      return nil unless issue
+      return nil unless defined?(RedmineJiraBridge::JiraSyncLog)
+
+      RedmineJiraBridge::JiraSyncLog.latest_for(issue)
+    rescue StandardError => e
+      logger.warn("#{LOGGER_PREFIX} Failed to load sync log for issue #{issue&.id || 'unknown'}: #{e.class}: #{e.message}")
+      nil
+    end
+
     private
 
     def project_setting_record(project)
@@ -215,3 +234,4 @@ require_relative 'redmine_jira_bridge/settings_validator'
 require_relative 'redmine_jira_bridge/patches/scope_warning_patch'
 require_relative 'redmine_jira_bridge/patches/projects_helper_patch'
 require_relative 'redmine_jira_bridge/hooks/issue_status_hook'
+require_relative 'redmine_jira_bridge/hooks/issue_sidebar_hook'

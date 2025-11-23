@@ -26,6 +26,12 @@ module RedmineJiraBridge
       jira_api_token_value
     end
 
+    def jira_issue_url(jira_key)
+      return nil if jira_base_url_value.to_s.strip.empty? || jira_key.to_s.strip.empty?
+
+      "#{jira_base_url_value.chomp('/')}/browse/#{jira_key}"
+    end
+
     def issue_jira_key(issue)
       return nil unless issue
 
@@ -276,6 +282,76 @@ module RedmineJiraBridge
       end
 
       refute builder_invoked, 'builder should not be invoked when project disabled'
+    end
+
+    def test_records_failure_journal_when_payload_validation_fails
+      issue = Issue.new(id: 123, subject: 'Invalid issue')
+      failing_builder = Object.new
+      failing_builder.define_singleton_method(:build) do
+        raise RedmineJiraBridge::JiraPayloadBuilder::ValidationError, 'summary missing'
+      end
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, ->(*_) { failing_builder }) do
+        job = RedmineJiraBridge::JiraCreateJob.new
+        job.stub(:locate_issue, issue) do
+          assert_raises(RedmineJiraBridge::JiraPayloadBuilder::ValidationError) do
+            job.perform(issue.id, {})
+          end
+        end
+      end
+
+      assert_equal 1, issue.journals.size
+      notes = issue.journals.first.notes
+      assert_includes notes, 'Jira creation failed'
+      assert_includes notes, 'summary missing'
+    end
+
+    def test_retryable_network_error_does_not_record_failure_journal
+      payload = { 'fields' => { 'summary' => 'Translate spec' } }
+      issue = Issue.new(id: 321, subject: 'Translate spec')
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, ->(_issue, _opts) { StubBuilder.new(payload) }) do
+        network_error = RedmineJiraBridge::JiraClient::NetworkError.new('network', StandardError.new('timeout'))
+        client = Object.new
+        client.define_singleton_method(:create_issue) { |_payload| raise network_error }
+
+        RedmineJiraBridge::JiraClient.stub(:new, ->(**_) { client }) do
+          job = RedmineJiraBridge::JiraCreateJob.new
+          waits = []
+          job.stub(:locate_issue, issue) do
+            job.stub(:retry_job, ->(wait:) { waits << wait }) do
+              job.perform(issue.id, {})
+            end
+          end
+          assert_equal [RedmineJiraBridge::JiraCreateJob::BASE_BACKOFF_SECONDS], waits
+        end
+      end
+
+      assert_empty issue.journals
+    end
+
+    def test_records_failure_journal_when_retry_budget_exhausted
+      payload = { 'fields' => { 'summary' => 'Translate spec' } }
+      issue = Issue.new(id: 654, subject: 'Translate spec')
+
+      RedmineJiraBridge::JiraPayloadBuilder.stub(:new, ->(_issue, _opts) { StubBuilder.new(payload) }) do
+        network_error = RedmineJiraBridge::JiraClient::NetworkError.new('network', StandardError.new('timeout'))
+        client = Object.new
+        client.define_singleton_method(:create_issue) { |_payload| raise network_error }
+
+        RedmineJiraBridge::JiraClient.stub(:new, ->(**_) { client }) do
+          job = RedmineJiraBridge::JiraCreateJob.new
+          job.executions = RedmineJiraBridge::JiraCreateJob::MAX_RETRY_ATTEMPTS
+          job.stub(:locate_issue, issue) do
+            assert_raises(RedmineJiraBridge::JiraClient::NetworkError) do
+              job.perform(issue.id, {})
+            end
+          end
+        end
+      end
+
+      assert_equal 1, issue.journals.size
+      assert_includes issue.journals.first.notes, 'Network error'
     end
   end
 end

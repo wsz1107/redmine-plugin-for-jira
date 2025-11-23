@@ -34,6 +34,7 @@ end
 
 require_relative 'jira_client'
 require_relative 'jira_payload_builder'
+require_relative 'sync_log_recorder'
 
 module RedmineJiraBridge
   class JiraCreateJob < ActiveJob::Base
@@ -44,6 +45,7 @@ module RedmineJiraBridge
 
     def perform(issue_id, options = {})
       issue = locate_issue(issue_id)
+      sync_logger = nil
       unless issue
         log(:warn, 'issue_missing', issue_id: issue_id)
         return
@@ -58,6 +60,7 @@ module RedmineJiraBridge
       end
 
       payload = build_payload(issue, merge_builder_options(project_config, options))
+      sync_logger = create_sync_log(issue, payload)
       result = jira_client.create_issue(payload)
 
       log(:info, 'success',
@@ -69,22 +72,37 @@ module RedmineJiraBridge
       jira_key = extract_jira_key(result)
       key_persisted = persist_jira_key(issue, jira_key)
       record_jira_journal(issue, jira_key) if key_persisted
+      sync_logger&.mark_success!(jira_key: jira_key, response: result)
 
       result
     rescue JiraPayloadBuilder::ValidationError => e
       log(:error, 'payload_validation_failed', issue_id: issue_id, error: e.message)
+      sync_logger&.mark_failure!(message: failure_message(e))
+      record_failure_journal(issue, failure_message(e))
       raise
     rescue JiraClient::NetworkError => e
-      handle_retryable_error('network_error', e, issue_id: issue_id)
+      handle_retryable_error('network_error', e,
+                             issue: issue,
+                             sync_logger: sync_logger)
     rescue JiraClient::ApiError => e
       if server_error?(e)
-        handle_retryable_error('api_error', e, issue_id: issue_id, status: e.status)
+        handle_retryable_error('api_error', e,
+                               issue: issue,
+                               sync_logger: sync_logger,
+                               response_status: e.status,
+                               response_body: e.body)
       else
         log(:error, 'api_error', issue_id: issue_id, status: e.status, error: e.message)
+        sync_logger&.mark_failure!(message: failure_message(e, e.status),
+                                   response: e.body,
+                                   status: e.status)
+        record_failure_journal(issue, failure_message(e, e.status))
         raise
       end
     rescue StandardError => e
       log(:error, 'unexpected_error', issue_id: issue_id, error: "#{e.class}: #{e.message}")
+      sync_logger&.mark_failure!(message: failure_message(e))
+      record_failure_journal(issue, failure_message(e))
       raise
     end
 
@@ -136,14 +154,26 @@ module RedmineJiraBridge
     end
 
     def handle_retryable_error(event, exception, metadata = {})
+      sync_logger = metadata.delete(:sync_logger)
+      issue = metadata.delete(:issue)
+      response_status = metadata.delete(:response_status)
+      response_body = metadata.delete(:response_body)
+
       payload = metadata.merge(error: exception.message, attempt: attempt_number)
       if retry_available?
         wait = backoff_delay
         log(:warn, event, payload.merge(wait: wait, action: 'retry'))
+        sync_logger&.mark_retry!(message: failure_message(exception, response_status),
+                                 response: response_body,
+                                 status: response_status)
         retry_job(wait: wait)
         return
       else
         log(:error, event, payload.merge(action: 'give_up'))
+        sync_logger&.mark_failure!(message: failure_message(exception, response_status),
+                                   response: response_body,
+                                   status: response_status)
+        record_failure_journal(issue, failure_message(exception, response_status))
         raise exception
       end
     end
@@ -267,18 +297,19 @@ module RedmineJiraBridge
     end
 
     def build_journal_notes(jira_key)
-      url = jira_issue_url(jira_key)
+      url = RedmineJiraBridge.jira_issue_url(jira_key)
       return "Created Jira issue #{jira_key}" unless url
 
       "Created Jira issue #{jira_key}: #{url}"
     end
 
-    def jira_issue_url(jira_key)
-      base = normalize_string(RedmineJiraBridge.jira_base_url)
-      key = normalize_string(jira_key)
-      return nil if base.nil? || key.nil?
+    def record_failure_journal(issue, detail)
+      return false unless issue
+      return false unless issue.respond_to?(:init_journal) && issue.respond_to?(:save)
 
-      "#{base.chomp('/')}/browse/#{key}"
+      notes = failure_journal_notes(detail)
+      issue.init_journal(journal_user(issue), notes)
+      persist_issue(issue)
     end
 
     def journal_user(issue)
@@ -293,6 +324,36 @@ module RedmineJiraBridge
 
     def issue_id_for(issue)
       issue.respond_to?(:id) ? issue.id : 'unknown'
+    end
+
+    def failure_journal_notes(detail)
+      base = detail.to_s.strip
+      message = base.empty? ? 'Jira creation failed.' : "Jira creation failed: #{base}"
+      "#{message} Review the Jira sync log on this issue for request and response details."
+    end
+
+    def create_sync_log(issue, payload)
+      return nil unless issue
+
+      logger = SyncLogRecorder.new(issue)
+      logger.record_start(payload)
+      logger
+    rescue StandardError => e
+      log(:debug, 'sync_log_unavailable', issue_id: issue_id_for(issue), error: e.message)
+      nil
+    end
+
+    def failure_message(exception, status = nil)
+      case exception
+      when JiraPayloadBuilder::ValidationError
+        "Invalid Jira payload: #{exception.message}"
+      when JiraClient::NetworkError
+        "Network error while contacting Jira: #{exception.message}"
+      when JiraClient::ApiError
+        "Jira API error#{status ? " (HTTP #{status})" : ''}: #{exception.message}"
+      else
+        "Unexpected error: #{exception.class}: #{exception.message}"
+      end
     end
 
     def normalize_string(value)
