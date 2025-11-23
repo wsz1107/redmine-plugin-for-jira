@@ -30,6 +30,14 @@ module RedmineJiraBridge
       end
     end
 
+    class ProjectWithoutRolesForUserStub
+      attr_reader :identifier
+
+      def initialize(identifier:)
+        @identifier = identifier
+      end
+    end
+
     class IssueStub
       attr_reader :id, :project
       attr_accessor :jira_bridge_jira_key
@@ -44,13 +52,20 @@ module RedmineJiraBridge
     class UserStub
       attr_reader :login
 
-      def initialize(login: 'alice', allowed: true)
+      def initialize(login: 'alice', allowed: true, role_ids: nil)
         @login = login
         @allowed = allowed
+        @role_ids = Array(role_ids).compact
       end
 
       def allowed_to?(permission, _project)
         permission == :trigger_jira_creation && @allowed
+      end
+
+      def roles_for_project(_project)
+        return [] if @role_ids.empty?
+
+        @role_ids.map { |rid| RoleStub.new(rid.to_s) }
       end
     end
 
@@ -113,6 +128,19 @@ module RedmineJiraBridge
       end
 
       assert_empty enqueued
+    end
+
+    def test_uses_actor_roles_when_project_lacks_roles_for_user
+      issue = IssueStub.new(id: 21, project: ProjectWithoutRolesForUserStub.new(identifier: 'demo'))
+      user = UserStub.new(role_ids: ['7'])
+      journal = JournalStub.new(user, [accepted_detail('3', '2')])
+      enqueued = []
+
+      RedmineJiraBridge::JiraCreateJob.stub(:perform_later, ->(issue_id) { enqueued << issue_id }) do
+        hook.controller_issues_edit_after_save(issue: issue, journal: journal)
+      end
+
+      assert_equal [21], enqueued
     end
 
     private
