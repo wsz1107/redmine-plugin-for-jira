@@ -3,64 +3,7 @@ require 'ostruct'
 require 'stringio'
 require 'logger'
 
-module RedmineJiraBridge
-  LOGGER_PREFIX = '[test_redmine_jira_bridge]'.freeze unless const_defined?(:LOGGER_PREFIX)
-
-  class << self
-    attr_writer :logger_instance
-    attr_accessor :jira_base_url_value, :jira_email_value, :jira_api_token_value, :project_configuration_provider
-
-    def logger
-      @logger_instance ||= Logger.new(StringIO.new)
-    end
-
-    def jira_base_url
-      jira_base_url_value
-    end
-
-    def jira_email
-      jira_email_value
-    end
-
-    def jira_api_token
-      jira_api_token_value
-    end
-
-    def jira_issue_url(jira_key)
-      return nil if jira_base_url_value.to_s.strip.empty? || jira_key.to_s.strip.empty?
-
-      "#{jira_base_url_value.chomp('/')}/browse/#{jira_key}"
-    end
-
-    def issue_jira_key(issue)
-      return nil unless issue
-
-      value = issue.respond_to?(:jira_bridge_jira_key) ? issue.jira_bridge_jira_key : nil
-      value.to_s.strip.empty? ? nil : value
-    end
-
-    def issue_has_jira_key?(issue)
-      issue_jira_key(issue).to_s.strip != ''
-    end
-
-    def project_configuration(project)
-      provider = project_configuration_provider
-      return provider.call(project) if provider.respond_to?(:call)
-      return provider if provider.is_a?(Hash)
-
-      {
-        enabled: true,
-        jira_project_key: project.respond_to?(:identifier) ? project.identifier : nil,
-        default_issue_type: 'Task'
-      }
-    end
-
-    def project_enabled?(project)
-      config = project_configuration(project)
-      config.key?(:enabled) ? !!config[:enabled] : true
-    end
-  end
-end
+require_relative 'support/test_redmine_bridge_helper'
 
 class Issue
   attr_reader :id, :subject, :description, :project, :priority, :custom_field_values, :save_calls
