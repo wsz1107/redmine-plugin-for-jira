@@ -109,7 +109,19 @@ module RedmineJiraBridge
     end
 
     def project_enabled?(project)
-      project_configuration(project)[:enabled]
+      return false unless project
+
+      project_module_enabled?(project) && project_configuration(project)[:enabled]
+    end
+
+    def project_module_enabled?(project)
+      return false unless project
+      return true unless project.respond_to?(:module_enabled?)
+
+      project.module_enabled?(:jira_bridge)
+    rescue StandardError => e
+      logger.warn("#{LOGGER_PREFIX} Failed to determine module state for project #{project&.id}: #{e.class}: #{e.message}")
+      false
     end
 
     def project_setting(project)

@@ -21,6 +21,11 @@ Redmine::Plugin.register :redmine_jira_bridge do
            partial: 'settings/redmine_jira_bridge'
 
   requires_redmine version_or_higher: '5.0.0'
+
+  project_module :jira_bridge do
+    permission :trigger_jira_creation, {}, require: :member
+    permission :view_jira_link, {}, read: true
+  end
 end
 
 RedmineJiraBridge.log_startup

@@ -53,13 +53,26 @@ module RedmineJiraBridge
       def actor_allowed_for_issue?(issue, actor)
         return false unless issue && actor
 
+        project = issue.project
+        actor_login = actor.respond_to?(:login) ? actor.login : actor.id
+
+        unless project
+          RedmineJiraBridge.logger.debug("#{RedmineJiraBridge::LOGGER_PREFIX} Missing project for issue ##{issue.id}; cannot authorize #{actor_login || 'unknown'}")
+          return false
+        end
+
+        unless actor.respond_to?(:allowed_to?) && actor.allowed_to?(:trigger_jira_creation, project)
+          RedmineJiraBridge.logger.debug("#{RedmineJiraBridge::LOGGER_PREFIX} User #{actor_login || 'unknown'} lacks :trigger_jira_creation permission on project #{project.identifier || project.id}")
+          return false
+        end
+
         allowed_role_ids = RedmineJiraBridge.allowed_role_ids
         if allowed_role_ids.empty?
           RedmineJiraBridge.logger.debug("#{RedmineJiraBridge::LOGGER_PREFIX} Allowed role list is empty; skipping Jira trigger for issue ##{issue.id}")
           return false
         end
 
-        roles = issue.project.roles_for_user(actor)
+        roles = project.roles_for_user(actor)
         roles.any? { |role| allowed_role_ids.include?(role.id.to_s) }
       end
     end

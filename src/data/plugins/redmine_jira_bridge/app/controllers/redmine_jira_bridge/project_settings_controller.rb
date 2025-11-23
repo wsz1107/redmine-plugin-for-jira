@@ -2,6 +2,7 @@ module RedmineJiraBridge
   class ProjectSettingsController < ::ApplicationController
     before_action :find_project
     before_action :authorize_project_edit!
+    before_action :ensure_jira_bridge_module_enabled
 
     helper :projects
 
@@ -62,6 +63,12 @@ module RedmineJiraBridge
       return false if value.nil?
 
       !%w[0 false].include?(value.to_s.strip.downcase)
+    end
+
+    def ensure_jira_bridge_module_enabled
+      return if RedmineJiraBridge.project_module_enabled?(@project)
+
+      render_403
     end
   end
 end

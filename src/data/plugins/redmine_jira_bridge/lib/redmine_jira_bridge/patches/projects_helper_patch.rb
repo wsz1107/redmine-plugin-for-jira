@@ -17,6 +17,7 @@ module RedmineJiraBridge
       def project_settings_tab_visible?
         project = @project if defined?(@project)
         return false unless project
+        return false unless RedmineJiraBridge.project_module_enabled?(project)
         return false unless defined?(User) && User.respond_to?(:current)
 
         user = User.current

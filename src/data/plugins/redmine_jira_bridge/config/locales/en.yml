@@ -1,2 +1,5 @@
 en:
   label_jira_bridge_tab: "Jira"
+  project_module_jira_bridge: "Jira Bridge"
+  permission_trigger_jira_creation: "Trigger Jira issue creation"
+  permission_view_jira_link: "View Jira issue link"
