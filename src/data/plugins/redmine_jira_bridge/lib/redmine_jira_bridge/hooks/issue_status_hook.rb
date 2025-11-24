@@ -24,6 +24,11 @@ module RedmineJiraBridge
           return
         end
 
+        if prior_successful_sync?(issue)
+          RedmineJiraBridge.logger.info("#{RedmineJiraBridge::LOGGER_PREFIX} Issue ##{issue.id} already synced to Jira previously; skipping trigger")
+          return
+        end
+
         actor = journal.user || User.current
         unless actor_allowed_for_issue?(issue, actor)
           RedmineJiraBridge.logger.debug("#{RedmineJiraBridge::LOGGER_PREFIX} User #{actor&.login || 'unknown'} is not permitted to trigger Jira creation for issue ##{issue.id}")
@@ -134,6 +139,20 @@ module RedmineJiraBridge
 
       def project_identifier(project)
         project.try(:identifier) || project.try(:id) || 'unknown'
+      end
+
+      def prior_successful_sync?(issue)
+        log = RedmineJiraBridge.latest_sync_log(issue)
+        return false unless log
+
+        status = log.respond_to?(:status) ? log.status.to_s : ''
+        return false unless status == 'success'
+
+        jira_key = log.respond_to?(:jira_key) ? log.jira_key : nil
+        jira_key.present?
+      rescue StandardError => e
+        RedmineJiraBridge.logger.warn("#{RedmineJiraBridge::LOGGER_PREFIX} Failed to check prior sync for issue #{issue&.id || 'unknown'}: #{e.class}: #{e.message}")
+        false
       end
 
     end

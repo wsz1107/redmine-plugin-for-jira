@@ -111,4 +111,8 @@ module RedmineJiraBridge
   rescue StandardError
     false
   end
+
+  def self.latest_sync_log(_issue)
+    nil
+  end
 end

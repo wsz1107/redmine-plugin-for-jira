@@ -130,6 +130,22 @@ module RedmineJiraBridge
       assert_empty enqueued
     end
 
+    def test_does_not_enqueue_when_prior_successful_sync_log_exists
+      issue = IssueStub.new(id: 31, project: ProjectStub.new(identifier: 'demo'))
+      journal = JournalStub.new(UserStub.new, [accepted_detail('3', '2')])
+      enqueued = []
+
+      sync_log = Struct.new(:status, :jira_key).new('success', 'JRI-77')
+
+      RedmineJiraBridge.stub(:latest_sync_log, sync_log) do
+        RedmineJiraBridge::JiraCreateJob.stub(:perform_later, ->(issue_id) { enqueued << issue_id }) do
+          hook.controller_issues_edit_after_save(issue: issue, journal: journal)
+        end
+      end
+
+      assert_empty enqueued
+    end
+
     def test_uses_actor_roles_when_project_lacks_roles_for_user
       issue = IssueStub.new(id: 21, project: ProjectWithoutRolesForUserStub.new(identifier: 'demo'))
       user = UserStub.new(role_ids: ['7'])
