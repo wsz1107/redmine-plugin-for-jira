@@ -76,10 +76,18 @@ module RedmineJiraBridge
       end
 
       assert_equal 'JRI', payload['fields']['project']['key']
+      description = payload['fields']['description']
+
       assert_equal 'Task', payload['fields']['issuetype']['name']
       assert_equal 'Translate spec', payload['fields']['summary']
-      assert_includes payload['fields']['description'], 'Line 1'
-      assert_includes payload['fields']['description'], 'https://redmine.local/issues/42'
+      assert_equal 'doc', description['type']
+      assert_equal 1, description['version']
+
+      text_nodes = description['content'].flat_map { |node| node['content'] }.select { |entry| entry['type'] == 'text' }
+      texts = text_nodes.map { |entry| entry['text'] }
+
+      assert_includes texts, 'Line 1'
+      assert_includes texts, 'Redmine issue: https://redmine.local/issues/42'
     end
 
     def test_priority_mapping_is_applied_case_insensitively

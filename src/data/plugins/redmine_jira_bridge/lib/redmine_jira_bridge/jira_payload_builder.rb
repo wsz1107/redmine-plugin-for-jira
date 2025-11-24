@@ -73,8 +73,19 @@ module RedmineJiraBridge
     end
 
     def build_description
+      # If caller explicitly passes an Atlassian Document payload, keep it
+      explicit = option(:description)
+      return explicit if explicit.is_a?(Hash)
+
+      text = build_description_text(explicit)
+      return nil if text.blank?
+
+      build_adf_document(text)
+    end
+
+    def build_description_text(explicit)
       parts = []
-      parts << issue_description if issue_description.present?
+      parts << issue_description(explicit) if issue_description(explicit).present?
 
       if (link = issue_reference_link).present?
         parts << "Redmine issue: #{link}"
@@ -85,10 +96,9 @@ module RedmineJiraBridge
       parts.join("\n\n")
     end
 
-    def issue_description
+    def issue_description(explicit)
       return @issue_description if defined?(@issue_description)
 
-      explicit = option(:description)
       raw = explicit.nil? ? issue.try(:description) : explicit
 
       @issue_description =
@@ -118,6 +128,34 @@ module RedmineJiraBridge
       "#{base}/issues/#{issue.id}"
     rescue StandardError
       nil
+    end
+
+    def build_adf_document(text)
+      paragraphs = text.to_s.split(/\n{2,}/).map(&:strip).reject(&:empty?)
+      content = paragraphs.map { |paragraph| adf_paragraph(paragraph) }.compact
+
+      return nil if content.empty?
+
+      {
+        'type' => 'doc',
+        'version' => 1,
+        'content' => content
+      }
+    end
+
+    def adf_paragraph(text)
+      fragments = text.split(/\n/)
+      nodes = []
+
+      fragments.each_with_index do |fragment, index|
+        trimmed = fragment.to_s
+        nodes << { 'type' => 'text', 'text' => trimmed } if trimmed.present?
+        nodes << { 'type' => 'hardBreak' } if index < fragments.length - 1
+      end
+
+      nodes = [{ 'type' => 'text', 'text' => '' }] if nodes.empty?
+
+      { 'type' => 'paragraph', 'content' => nodes }
     end
 
     def fetch_setting_value(key)

@@ -66,5 +66,17 @@
       <%= label_tag 'settings_default_issue_type', 'Default Jira issue type' %>
       <%= text_field_tag 'settings[default_issue_type]', settings['default_issue_type'], size: 30, placeholder: 'Task' %>
     </p>
+
+    <p>
+      <%= label_tag 'settings_priority_mapping', 'Priority mapping' %>
+      <%= text_area_tag 'settings[priority_mapping]',
+                        settings['priority_mapping'],
+                        rows: 4,
+                        cols: 60,
+                        placeholder: %({ "Low": "Low", "Normal": "Medium", "High": "High" }) %>
+      <span class="info">
+        JSON object mapping Redmine priority names to Jira priority names (keys = Redmine, values = Jira).
+      </span>
+    </p>
   </fieldset>
 </div>
